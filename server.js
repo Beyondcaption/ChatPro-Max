@@ -119,7 +119,7 @@ app.post('/api/screenshots', (req, res) => {
     broadcastToAdmins({
         type: 'screenshot_ready',
         employeeId,
-        imageData,
+        screenshot: imageData,
         timestamp: timestamp || Date.now()
     });
 
