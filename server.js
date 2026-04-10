@@ -166,7 +166,7 @@ app.put('/api/admin/users/:username/password', (req, res) => {
 app.post('/api/activity', (req, res) => {
     const { employeeId, timestamp, activity } = req.body;
     
-    if (!employeeId || !activity) {
+    if (employeeId === undefined || !activity) {
         return res.status(400).json({ error: 'Missing required fields' });
     }
 
