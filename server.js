@@ -20,6 +20,17 @@ const screenshots = new Map();
 const activities = new Map();
 const downloads = new Map();
 
+// User Management Database
+const users = new Map();
+// Initialize with default admin
+users.set('admin', {
+    username: 'admin',
+    password: 'admin123', // Change this!
+    employeeId: 0,
+    role: 'admin',
+    createdAt: Date.now()
+});
+
 console.log('🚀 Monitoring Relay Server starting...');
 
 // ============================================
@@ -35,6 +46,120 @@ app.get('/health', (req, res) => {
         uptime: Math.floor(process.uptime()),
         memory: Math.floor(process.memoryUsage().heapUsed / 1024 / 1024) + 'MB'
     });
+});
+
+// ============================================
+// USER MANAGEMENT ENDPOINTS
+// ============================================
+
+// Login Endpoint
+app.post('/api/login', (req, res) => {
+    const { username, password } = req.body;
+    
+    if (!username || !password) {
+        return res.status(400).json({ error: 'Username and password required' });
+    }
+    
+    const user = users.get(username);
+    
+    if (!user || user.password !== password) {
+        return res.status(401).json({ error: 'Invalid credentials' });
+    }
+    
+    res.json({
+        success: true,
+        user: {
+            username: user.username,
+            employeeId: user.employeeId,
+            role: user.role
+        }
+    });
+});
+
+// Get All Users (Admin only - no auth for now)
+app.get('/api/admin/users', (req, res) => {
+    const userList = Array.from(users.values()).map(u => ({
+        username: u.username,
+        employeeId: u.employeeId,
+        role: u.role,
+        createdAt: u.createdAt
+    }));
+    
+    res.json({ users: userList });
+});
+
+// Create User (Admin only - no auth for now)
+app.post('/api/admin/users', (req, res) => {
+    const { username, password, employeeName } = req.body;
+    
+    if (!username || !password) {
+        return res.status(400).json({ error: 'Username and password required' });
+    }
+    
+    if (users.has(username)) {
+        return res.status(409).json({ error: 'Username already exists' });
+    }
+    
+    // Generate next employeeId
+    const existingIds = Array.from(users.values()).map(u => u.employeeId);
+    const maxId = existingIds.length > 0 ? Math.max(...existingIds) : 0;
+    const newEmployeeId = maxId + 1;
+    
+    const newUser = {
+        username,
+        password,
+        employeeId: newEmployeeId,
+        employeeName: employeeName || username,
+        role: 'employee',
+        createdAt: Date.now()
+    };
+    
+    users.set(username, newUser);
+    
+    res.json({
+        success: true,
+        user: {
+            username: newUser.username,
+            employeeId: newUser.employeeId,
+            role: newUser.role
+        }
+    });
+});
+
+// Delete User (Admin only - no auth for now)
+app.delete('/api/admin/users/:username', (req, res) => {
+    const { username } = req.params;
+    
+    if (username === 'admin') {
+        return res.status(403).json({ error: 'Cannot delete admin user' });
+    }
+    
+    if (!users.has(username)) {
+        return res.status(404).json({ error: 'User not found' });
+    }
+    
+    users.delete(username);
+    
+    res.json({ success: true });
+});
+
+// Update User Password (Admin only - no auth for now)
+app.put('/api/admin/users/:username/password', (req, res) => {
+    const { username } = req.params;
+    const { newPassword } = req.body;
+    
+    if (!newPassword) {
+        return res.status(400).json({ error: 'New password required' });
+    }
+    
+    const user = users.get(username);
+    if (!user) {
+        return res.status(404).json({ error: 'User not found' });
+    }
+    
+    user.password = newPassword;
+    
+    res.json({ success: true });
 });
 
 // Activity Upload
@@ -119,7 +244,7 @@ app.post('/api/screenshots', (req, res) => {
     broadcastToAdmins({
         type: 'screenshot_ready',
         employeeId,
-        screenshot: imageData,
+        screenshot: imageData,  // Changed from imageData to screenshot
         timestamp: timestamp || Date.now()
     });
 
