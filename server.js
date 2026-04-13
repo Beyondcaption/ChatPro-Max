@@ -3,23 +3,23 @@ const http = require('http');
 const WebSocket = require('ws');
 const cors = require('cors');
 const path = require('path');
- 
+
 const app = express();
 const server = http.createServer(app);
 const wss = new WebSocket.Server({ server });
- 
+
 // Middleware
 app.use(cors());
 app.use(express.json({ limit: '50mb' })); // ✅ Größeres Limit für Screenshots!
 app.use(express.static('public'));
- 
+
 // In-Memory Storage
 const agents = new Map();
 const admins = new Set();
 const screenshots = new Map();
 const activities = new Map();
 const downloads = new Map();
- 
+
 // User Management Database
 const users = new Map();
 // Initialize with default admin
@@ -30,14 +30,14 @@ users.set('admin', {
     role: 'admin',
     createdAt: Date.now()
 });
- 
+
 console.log('🚀 Monitoring Relay Server starting...');
- 
+
 // ✅ AUTO-CLEANUP CONFIGURATION
 const MAX_ITEMS_PER_EMPLOYEE = 100;
 const MAX_AGE_DAYS = 30;
 const CLEANUP_INTERVAL_HOURS = 24;
- 
+
 // ✅ Cleanup Function - Läuft alle 24h
 function cleanupOldData() {
     const now = Date.now();
@@ -112,18 +112,18 @@ function cleanupOldData() {
     
     console.log(`✅ Cleanup complete! Removed ${totalRemoved} total items`);
 }
- 
+
 // ✅ Start automatic cleanup (runs every 24 hours)
 setInterval(cleanupOldData, CLEANUP_INTERVAL_HOURS * 60 * 60 * 1000);
 console.log(`🧹 Auto-cleanup scheduled: Every ${CLEANUP_INTERVAL_HOURS}h, Max ${MAX_AGE_DAYS} days, Max ${MAX_ITEMS_PER_EMPLOYEE} items/employee`);
- 
+
 // Run cleanup on startup (after 5 seconds)
 setTimeout(cleanupOldData, 5000);
- 
+
 // ============================================
 // REST API ENDPOINTS
 // ============================================
- 
+
 // Health Check
 app.get('/health', (req, res) => {
     res.json({ 
@@ -134,11 +134,11 @@ app.get('/health', (req, res) => {
         memory: Math.floor(process.memoryUsage().heapUsed / 1024 / 1024) + 'MB'
     });
 });
- 
+
 // ============================================
 // USER MANAGEMENT ENDPOINTS
 // ============================================
- 
+
 // Login Endpoint
 app.post('/api/login', (req, res) => {
     const { username, password } = req.body;
@@ -162,7 +162,7 @@ app.post('/api/login', (req, res) => {
         }
     });
 });
- 
+
 // Get All Users (Admin only - no auth for now)
 app.get('/api/admin/users', (req, res) => {
     const userList = Array.from(users.values()).map(u => ({
@@ -174,7 +174,7 @@ app.get('/api/admin/users', (req, res) => {
     
     res.json({ users: userList });
 });
- 
+
 // Create User (Admin only - no auth for now)
 app.post('/api/admin/users', (req, res) => {
     const { username, password, employeeName } = req.body;
@@ -212,7 +212,7 @@ app.post('/api/admin/users', (req, res) => {
         }
     });
 });
- 
+
 // Delete User (Admin only - no auth for now)
 app.delete('/api/admin/users/:username', (req, res) => {
     const { username } = req.params;
@@ -229,7 +229,7 @@ app.delete('/api/admin/users/:username', (req, res) => {
     
     res.json({ success: true });
 });
- 
+
 // Update User Password (Admin only - no auth for now)
 app.put('/api/admin/users/:username/password', (req, res) => {
     const { username } = req.params;
@@ -248,7 +248,81 @@ app.put('/api/admin/users/:username/password', (req, res) => {
     
     res.json({ success: true });
 });
- 
+
+// ============================================
+// USER MANAGEMENT ALIASES (für Dashboard)
+// ============================================
+
+// Create User - Alias mit auto-generated password
+app.post('/api/users/create', (req, res) => {
+    const { username, employeeName } = req.body;
+    
+    if (!username || !employeeName) {
+        return res.status(400).json({ error: 'Username and employeeName required' });
+    }
+    
+    if (users.has(username)) {
+        return res.status(409).json({ error: 'Username already exists' });
+    }
+    
+    // Generate random password
+    const password = Math.random().toString(36).slice(-8) + Math.random().toString(36).slice(-8);
+    
+    // Generate next employeeId
+    const existingIds = Array.from(users.values()).map(u => u.employeeId);
+    const maxId = existingIds.length > 0 ? Math.max(...existingIds) : 0;
+    const newEmployeeId = maxId + 1;
+    
+    const newUser = {
+        username,
+        password,
+        employeeId: newEmployeeId,
+        employeeName: employeeName || username,
+        role: 'employee',
+        createdAt: Date.now()
+    };
+    
+    users.set(username, newUser);
+    
+    console.log(`👤 New user created: ${username} (ID: ${newEmployeeId})`);
+    
+    res.json({
+        success: true,
+        username: newUser.username,
+        password: password, // ⚠️ Only returned once!
+        employeeId: newUser.employeeId,
+        employeeName: newUser.employeeName
+    });
+});
+
+// Delete User by ID - Alias
+app.delete('/api/users/:employeeId', (req, res) => {
+    const employeeId = parseInt(req.params.employeeId);
+    
+    if (employeeId === 0) {
+        return res.status(403).json({ error: 'Cannot delete admin user' });
+    }
+    
+    // Find user by employeeId
+    let userToDelete = null;
+    for (const [username, user] of users.entries()) {
+        if (user.employeeId === employeeId) {
+            userToDelete = username;
+            break;
+        }
+    }
+    
+    if (!userToDelete) {
+        return res.status(404).json({ error: 'User not found' });
+    }
+    
+    users.delete(userToDelete);
+    
+    console.log(`👤 User deleted: ${userToDelete} (ID: ${employeeId})`);
+    
+    res.json({ success: true });
+});
+
 // Activity Upload
 app.post('/api/activity', (req, res) => {
     const { employeeId, timestamp, activity } = req.body;
@@ -256,7 +330,7 @@ app.post('/api/activity', (req, res) => {
     if (employeeId === undefined || !activity) {
         return res.status(400).json({ error: 'Missing required fields' });
     }
- 
+
     // Store agent info
     const agentKey = `agent_${employeeId}`;
     agents.set(agentKey, {
@@ -265,7 +339,7 @@ app.post('/api/activity', (req, res) => {
         lastActivity: activity,
         lastSeen: Date.now()
     });
- 
+
     // Store activity history (keep last 100)
     if (!activities.has(employeeId)) {
         activities.set(employeeId, []);
@@ -278,7 +352,7 @@ app.post('/api/activity', (req, res) => {
     if (activityList.length > 100) {
         activityList.length = 100;
     }
- 
+
     // ✅ FIXED: Broadcast mit richtigem Format!
     broadcastToAdmins({
         type: 'activity',  // Dashboard erwartet 'activity'!
@@ -286,10 +360,10 @@ app.post('/api/activity', (req, res) => {
         activity,
         timestamp: timestamp || Date.now()
     });
- 
+
     res.json({ success: true });
 });
- 
+
 // ✅ Screenshot Upload - FÜR BILDER!
 app.post('/api/screenshots', (req, res) => {
     const { employeeId, imageData, filename, timestamp } = req.body;
@@ -325,13 +399,13 @@ app.post('/api/screenshots', (req, res) => {
     
     res.json({ success: true });
 });
- 
+
 // Alerts - für Downloads UND User-Screenshots!
 app.post('/api/alerts', (req, res) => {
     const { type, data, timestamp, employeeId } = req.body;
- 
+
     console.log('🚨 Alert received:', type, 'from employee:', employeeId);
- 
+
     // ✅ User-Screenshots (vom Snipping Tool etc.)
     if (type === 'user_screenshot' && data && data.filename) {
         if (!screenshots.has(employeeId)) {
@@ -347,7 +421,7 @@ app.post('/api/alerts', (req, res) => {
         if (screenshotList.length > 100) {
             screenshotList.length = 100;
         }
- 
+
         // Broadcast to Dashboard
         broadcastToAdmins({
             type: 'screenshot',  // Dashboard erwartet 'screenshot'!
@@ -373,7 +447,7 @@ app.post('/api/alerts', (req, res) => {
         if (downloadList.length > 100) {
             downloadList.length = 100;
         }
- 
+
         // Broadcast to Dashboard
         broadcastToAdmins({
             type: 'download_detected',
@@ -397,10 +471,10 @@ app.post('/api/alerts', (req, res) => {
             }
         });
     }
- 
+
     res.json({ success: true });
 });
- 
+
 // Ping (keep-alive)
 app.post('/api/ping', (req, res) => {
     const { employeeId, timestamp, version } = req.body;
@@ -414,28 +488,28 @@ app.post('/api/ping', (req, res) => {
     
     res.json({ success: true });
 });
- 
+
 // Get Screenshots for employee
 app.get('/api/screenshots/:employeeId', (req, res) => {
     const employeeId = parseInt(req.params.employeeId);
     const employeeScreenshots = screenshots.get(employeeId) || [];
     res.json(employeeScreenshots);
 });
- 
+
 // Get Activities for employee
 app.get('/api/activities/:employeeId', (req, res) => {
     const employeeId = parseInt(req.params.employeeId);
     const employeeActivities = activities.get(employeeId) || [];
     res.json(employeeActivities);
 });
- 
+
 // Get Downloads for employee
 app.get('/api/downloads/:employeeId', (req, res) => {
     const employeeId = parseInt(req.params.employeeId);
     const employeeDownloads = downloads.get(employeeId) || [];
     res.json(employeeDownloads);
 });
- 
+
 // Get all agents
 app.get('/api/agents', (req, res) => {
     const now = Date.now();
@@ -448,23 +522,23 @@ app.get('/api/agents', (req, res) => {
     }));
     res.json(agentsList);
 });
- 
+
 // ============================================
 // WEBSOCKET
 // ============================================
- 
+
 wss.on('connection', (ws, req) => {
     console.log('📡 New WebSocket connection');
     
     const url = new URL(req.url, `http://${req.headers.host}`);
     const role = url.searchParams.get('role');
     const employeeId = url.searchParams.get('employeeId');
- 
+
     if (role === 'admin') {
         // Admin connection
         admins.add(ws);
         console.log('👨‍💼 Admin connected. Total admins:', admins.size);
- 
+
         // Send current agents list
         const now = Date.now();
         const agentsList = Array.from(agents.values()).map(agent => ({
@@ -474,17 +548,17 @@ wss.on('connection', (ws, req) => {
             status: now - agent.lastSeen < 120000 ? 'online' : 'offline',
             lastActivity: agent.lastActivity
         }));
- 
+
         ws.send(JSON.stringify({
             type: 'agents_list',
             agents: agentsList
         }));
- 
+
         ws.on('close', () => {
             admins.delete(ws);
             console.log('👨‍💼 Admin disconnected. Total admins:', admins.size);
         });
- 
+
         ws.on('error', (error) => {
             console.error('Admin WebSocket error:', error.message);
         });
@@ -493,13 +567,13 @@ wss.on('connection', (ws, req) => {
         // Still add to admins for backward compatibility
         admins.add(ws);
         console.log('📡 Client connected (no role). Total clients:', admins.size);
- 
+
         ws.on('close', () => {
             admins.delete(ws);
             console.log('📡 Client disconnected. Total clients:', admins.size);
         });
     }
- 
+
     ws.on('message', (message) => {
         try {
             const data = JSON.parse(message);
@@ -530,7 +604,7 @@ wss.on('connection', (ws, req) => {
         }
     });
 });
- 
+
 function broadcastToAdmins(message) {
     let sent = 0;
     admins.forEach(admin => {
@@ -547,16 +621,16 @@ function broadcastToAdmins(message) {
         console.log(`📤 Broadcast to ${sent} client(s): ${message.type}`);
     }
 }
- 
+
 // ============================================
 // CLEANUP & MAINTENANCE
 // ============================================
- 
+
 // Cleanup old inactive agents every 5 minutes
 setInterval(() => {
     const now = Date.now();
     const timeout = 300000; // 5 minutes
- 
+
     for (const [key, agent] of agents.entries()) {
         if (now - agent.lastSeen > timeout) {
             agents.delete(key);
@@ -570,7 +644,7 @@ setInterval(() => {
         }
     }
 }, 300000);
- 
+
 // Memory cleanup every 30 minutes
 setInterval(() => {
     // Cleanup old screenshots (keep only last 10)
@@ -579,28 +653,28 @@ setInterval(() => {
             list.length = 10;
         }
     });
- 
+
     // Cleanup old activities (keep only last 100)
     activities.forEach((list, employeeId) => {
         if (list.length > 100) {
             list.length = 100;
         }
     });
- 
+
     // Cleanup old downloads (keep only last 100)
     downloads.forEach((list, employeeId) => {
         if (list.length > 100) {
             list.length = 100;
         }
     });
- 
+
     console.log('🧹 Memory cleanup completed');
 }, 1800000);
- 
+
 // ============================================
 // SERVER START
 // ============================================
- 
+
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, '0.0.0.0', () => {
     console.log('');
@@ -616,7 +690,7 @@ server.listen(PORT, '0.0.0.0', () => {
     console.log('💡 Dashboard can connect via WebSocket');
     console.log('');
 });
- 
+
 // Graceful shutdown
 process.on('SIGTERM', () => {
     console.log('🛑 SIGTERM received, shutting down gracefully...');
@@ -625,7 +699,7 @@ process.on('SIGTERM', () => {
         process.exit(0);
     });
 });
- 
+
 process.on('SIGINT', () => {
     console.log('🛑 SIGINT received, shutting down gracefully...');
     server.close(() => {
