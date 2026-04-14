@@ -25,7 +25,7 @@ const downloads = new Map();
 // 💾 PERSISTENT USER STORAGE (FILE-BASED)
 // ============================================
 const USERS_FILE = path.join(__dirname, 'users.json');
- 
+
 // Load users from file
 function loadUsers() {
     try {
@@ -64,7 +64,7 @@ function loadUsers() {
         saveUsers();
     }
 }
- 
+
 // Save users to file
 function saveUsers() {
     try {
@@ -75,10 +75,10 @@ function saveUsers() {
         console.error('❌ Error saving users:', error.message);
     }
 }
- 
+
 // User Management Database
 const users = new Map();
- 
+
 // Load users on startup
 loadUsers();
  
@@ -548,7 +548,7 @@ app.post('/api/ping', (req, res) => {
 // ============================================
 // 🔧 FIXED GET ENDPOINTS - Jetzt mit richtigem Format!
 // ============================================
- 
+
 // Get Screenshots for employee
 app.get('/api/screenshots/:employeeId', (req, res) => {
     const employeeId = parseInt(req.params.employeeId);
@@ -583,13 +583,13 @@ app.get('/api/activities/:employeeId', (req, res) => {
         activities: transformedActivities 
     });
 });
- 
+
 // ═══════════════════════════════════════════════════════════════════
 // TRANSLATIONS API (NEW!)
 // ═══════════════════════════════════════════════════════════════════
- 
+
 const translations = new Map();
- 
+
 // POST Translation
 app.post('/api/translations', (req, res) => {
     const { employeeId, employeeName, timestamp, translation } = req.body;
@@ -625,7 +625,7 @@ app.post('/api/translations', (req, res) => {
     
     res.json({ success: true });
 });
- 
+
 // GET Translations for employee
 app.get('/api/translations/:employeeId', (req, res) => {
     const employeeId = parseInt(req.params.employeeId);
@@ -692,12 +692,12 @@ app.get('/api/employees', (req, res) => {
     
     res.json({ employees: employeeList });
 });
- 
+
 // ============================================
 // 📊 DASHBOARD ROUTE (explicit for Railway)
 // ============================================
 app.get('/dashboard.html', (req, res) => {
-    res.sendFile(path.join(__dirname, 'public', 'dashboard.html'));
+    res.sendFile(path.join(__dirname, 'dashboard.html'));
 });
  
 // ============================================
