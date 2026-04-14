@@ -1,11 +1,9 @@
-
-
-
 const express = require('express');
 const http = require('http');
 const WebSocket = require('ws');
 const cors = require('cors');
 const path = require('path');
+const fs = require('fs');
  
 const app = express();
 const server = http.createServer(app);
@@ -23,16 +21,66 @@ const screenshots = new Map();
 const activities = new Map();
 const downloads = new Map();
  
+// ============================================
+// 💾 PERSISTENT USER STORAGE (FILE-BASED)
+// ============================================
+const USERS_FILE = path.join(__dirname, 'users.json');
+
+// Load users from file
+function loadUsers() {
+    try {
+        if (fs.existsSync(USERS_FILE)) {
+            const data = fs.readFileSync(USERS_FILE, 'utf8');
+            const usersArray = JSON.parse(data);
+            console.log(`💾 Loading ${usersArray.length} users from file...`);
+            
+            usersArray.forEach(user => {
+                users.set(user.username, user);
+            });
+            
+            console.log(`✅ Loaded ${users.size} users successfully`);
+        } else {
+            console.log('📝 No users file found, creating default admin...');
+            // Initialize with default admin
+            users.set('admin', {
+                username: 'admin',
+                password: 'admin123',
+                employeeId: 0,
+                role: 'admin',
+                createdAt: Date.now()
+            });
+            saveUsers();
+        }
+    } catch (error) {
+        console.error('❌ Error loading users:', error.message);
+        // Fallback: create default admin
+        users.set('admin', {
+            username: 'admin',
+            password: 'admin123',
+            employeeId: 0,
+            role: 'admin',
+            createdAt: Date.now()
+        });
+        saveUsers();
+    }
+}
+
+// Save users to file
+function saveUsers() {
+    try {
+        const usersArray = Array.from(users.values());
+        fs.writeFileSync(USERS_FILE, JSON.stringify(usersArray, null, 2), 'utf8');
+        console.log(`💾 Saved ${usersArray.length} users to file`);
+    } catch (error) {
+        console.error('❌ Error saving users:', error.message);
+    }
+}
+
 // User Management Database
 const users = new Map();
-// Initialize with default admin
-users.set('admin', {
-    username: 'admin',
-    password: 'admin123',
-    employeeId: 0,
-    role: 'admin',
-    createdAt: Date.now()
-});
+
+// Load users on startup
+loadUsers();
  
 console.log('🚀 Monitoring Relay Server starting...');
  
@@ -205,6 +253,7 @@ app.post('/api/admin/users', (req, res) => {
     };
     
     users.set(username, newUser);
+    saveUsers(); // 💾 Save to file!
     
     res.json({
         success: true,
@@ -229,6 +278,7 @@ app.delete('/api/admin/users/:username', (req, res) => {
     }
     
     users.delete(username);
+    saveUsers(); // 💾 Save to file!
     
     res.json({ success: true });
 });
@@ -248,6 +298,7 @@ app.put('/api/admin/users/:username/password', (req, res) => {
     }
     
     user.password = newPassword;
+    saveUsers(); // 💾 Save to file!
     
     res.json({ success: true });
 });
@@ -286,6 +337,7 @@ app.post('/api/users/create', (req, res) => {
     };
     
     users.set(username, newUser);
+    saveUsers(); // 💾 Save to file!
     
     console.log(`👤 New user created: ${username} (ID: ${newEmployeeId})`);
     
@@ -320,6 +372,7 @@ app.delete('/api/users/:employeeId', (req, res) => {
     }
     
     users.delete(userToDelete);
+    saveUsers(); // 💾 Save to file!
     
     console.log(`👤 User deleted: ${userToDelete} (ID: ${employeeId})`);
     
@@ -495,7 +548,7 @@ app.post('/api/ping', (req, res) => {
 // ============================================
 // 🔧 FIXED GET ENDPOINTS - Jetzt mit richtigem Format!
 // ============================================
- 
+
 // Get Screenshots for employee
 app.get('/api/screenshots/:employeeId', (req, res) => {
     const employeeId = parseInt(req.params.employeeId);
