@@ -4,6 +4,7 @@ const WebSocket = require('ws');
 const cors = require('cors');
 const path = require('path');
 const fs = require('fs');
+const { createClient } = require('@supabase/supabase-js');
  
 const app = express();
 const server = http.createServer(app);
@@ -22,63 +23,106 @@ const activities = new Map();
 const downloads = new Map();
  
 // ============================================
-// 💾 PERSISTENT USER STORAGE (FILE-BASED)
+// 🔥 SUPABASE CONFIGURATION
 // ============================================
-const USERS_FILE = path.join(__dirname, 'users.json');
-
-// Load users from file
-function loadUsers() {
-    try {
-        if (fs.existsSync(USERS_FILE)) {
-            const data = fs.readFileSync(USERS_FILE, 'utf8');
-            const usersArray = JSON.parse(data);
-            console.log(`💾 Loading ${usersArray.length} users from file...`);
-            
-            usersArray.forEach(user => {
-                users.set(user.username, user);
-            });
-            
-            console.log(`✅ Loaded ${users.size} users successfully`);
-        } else {
-            console.log('📝 No users file found, creating default admin...');
-            // Initialize with default admin
-            users.set('admin', {
-                username: 'admin',
-                password: 'admin123',
-                employeeId: 0,
-                role: 'admin',
-                createdAt: Date.now()
-            });
-            saveUsers();
-        }
-    } catch (error) {
-        console.error('❌ Error loading users:', error.message);
-        // Fallback: create default admin
-        users.set('admin', {
-            username: 'admin',
-            password: 'admin123',
-            employeeId: 0,
-            role: 'admin',
-            createdAt: Date.now()
-        });
-        saveUsers();
-    }
+const supabaseUrl = process.env.SUPABASE_URL;
+const supabaseKey = process.env.SUPABASE_KEY;
+ 
+if (!supabaseUrl || !supabaseKey) {
+    console.error('❌ CRITICAL: SUPABASE_URL and SUPABASE_KEY must be set!');
+    console.error('💡 Set them in Railway → Settings → Variables');
+    process.exit(1);
 }
-
-// Save users to file
-function saveUsers() {
-    try {
-        const usersArray = Array.from(users.values());
-        fs.writeFileSync(USERS_FILE, JSON.stringify(usersArray, null, 2), 'utf8');
-        console.log(`💾 Saved ${usersArray.length} users to file`);
-    } catch (error) {
-        console.error('❌ Error saving users:', error.message);
-    }
-}
-
-// User Management Database
+ 
+const supabase = createClient(supabaseUrl, supabaseKey);
+console.log('✅ Supabase client initialized');
+console.log(`📡 Connected to: ${supabaseUrl}`);
+ 
+// ============================================
+// 💾 PERSISTENT USER STORAGE (SUPABASE)
+// ============================================
+ 
+// User Cache (in-memory for performance)
 const users = new Map();
-
+ 
+// Load users from Supabase
+async function loadUsers() {
+    try {
+        console.log('📡 Loading users from Supabase...');
+        const { data, error } = await supabase
+            .from('users')
+            .select('*');
+        
+        if (error) throw error;
+        
+        users.clear();
+        data.forEach(user => {
+            users.set(user.username, {
+                username: user.username,
+                password: user.password,
+                employeeId: user.employee_id,
+                name: user.name,
+                role: user.role,
+                createdAt: user.created_at,
+                lastLogin: user.last_login
+            });
+        });
+        
+        console.log(`✅ Loaded ${users.size} users from Supabase`);
+    } catch (error) {
+        console.error('❌ Error loading users from Supabase:', error.message);
+    }
+}
+ 
+// Save/Update single user in Supabase
+async function saveUser(user) {
+    try {
+        const { data, error } = await supabase
+            .from('users')
+            .upsert({
+                username: user.username,
+                password: user.password,
+                employee_id: user.employeeId,
+                name: user.name,
+                role: user.role,
+                created_at: user.createdAt,
+                last_login: user.lastLogin
+            }, {
+                onConflict: 'username'
+            });
+        
+        if (error) throw error;
+        
+        // Update cache
+        users.set(user.username, user);
+        console.log(`💾 Saved user to Supabase: ${user.username}`);
+        return true;
+    } catch (error) {
+        console.error('❌ Error saving user to Supabase:', error.message);
+        return false;
+    }
+}
+ 
+// Delete user from Supabase
+async function deleteUserFromDB(username) {
+    try {
+        const { error } = await supabase
+            .from('users')
+            .delete()
+            .eq('username', username);
+        
+        if (error) throw error;
+        
+        // Update cache
+        users.delete(username);
+        console.log(`🗑️ Deleted user from Supabase: ${username}`);
+        return true;
+    } catch (error) {
+        console.error('❌ Error deleting user from Supabase:', error.message);
+        return false;
+    }
+}
+ 
 // Load users on startup
 loadUsers();
  
@@ -191,7 +235,7 @@ app.get('/health', (req, res) => {
 // ============================================
  
 // Login Endpoint
-app.post('/api/login', (req, res) => {
+app.post('/api/login', async (req, res) => {
     const { username, password } = req.body;
     
     if (!username || !password) {
@@ -203,6 +247,10 @@ app.post('/api/login', (req, res) => {
     if (!user || user.password !== password) {
         return res.status(401).json({ error: 'Invalid credentials' });
     }
+    
+    // Update lastLogin
+    user.lastLogin = Date.now();
+    await saveUser(user);
     
     res.json({
         success: true,
@@ -227,7 +275,7 @@ app.get('/api/admin/users', (req, res) => {
 });
  
 // Create User (Admin only - no auth for now)
-app.post('/api/admin/users', (req, res) => {
+app.post('/api/admin/users', async (req, res) => {
     const { username, password, employeeName } = req.body;
     
     if (!username || !password) {
@@ -247,13 +295,16 @@ app.post('/api/admin/users', (req, res) => {
         username,
         password,
         employeeId: newEmployeeId,
-        employeeName: employeeName || username,
+        name: employeeName || username,
         role: 'employee',
         createdAt: Date.now()
     };
     
-    users.set(username, newUser);
-    saveUsers(); // 💾 Save to file!
+    const success = await saveUser(newUser);
+    
+    if (!success) {
+        return res.status(500).json({ error: 'Failed to save user' });
+    }
     
     res.json({
         success: true,
@@ -266,7 +317,7 @@ app.post('/api/admin/users', (req, res) => {
 });
  
 // Delete User (Admin only - no auth for now)
-app.delete('/api/admin/users/:username', (req, res) => {
+app.delete('/api/admin/users/:username', async (req, res) => {
     const { username } = req.params;
     
     if (username === 'admin') {
@@ -277,14 +328,17 @@ app.delete('/api/admin/users/:username', (req, res) => {
         return res.status(404).json({ error: 'User not found' });
     }
     
-    users.delete(username);
-    saveUsers(); // 💾 Save to file!
+    const success = await deleteUserFromDB(username);
+    
+    if (!success) {
+        return res.status(500).json({ error: 'Failed to delete user' });
+    }
     
     res.json({ success: true });
 });
  
 // Update User Password (Admin only - no auth for now)
-app.put('/api/admin/users/:username/password', (req, res) => {
+app.put('/api/admin/users/:username/password', async (req, res) => {
     const { username } = req.params;
     const { newPassword } = req.body;
     
@@ -298,7 +352,11 @@ app.put('/api/admin/users/:username/password', (req, res) => {
     }
     
     user.password = newPassword;
-    saveUsers(); // 💾 Save to file!
+    const success = await saveUser(user);
+    
+    if (!success) {
+        return res.status(500).json({ error: 'Failed to update password' });
+    }
     
     res.json({ success: true });
 });
@@ -308,7 +366,7 @@ app.put('/api/admin/users/:username/password', (req, res) => {
 // ============================================
  
 // Create User - Alias mit auto-generated password
-app.post('/api/users/create', (req, res) => {
+app.post('/api/users/create', async (req, res) => {
     const { username, employeeName } = req.body;
     
     if (!username || !employeeName) {
@@ -331,13 +389,16 @@ app.post('/api/users/create', (req, res) => {
         username,
         password,
         employeeId: newEmployeeId,
-        employeeName: employeeName || username,
+        name: employeeName || username,
         role: 'employee',
         createdAt: Date.now()
     };
     
-    users.set(username, newUser);
-    saveUsers(); // 💾 Save to file!
+    const success = await saveUser(newUser);
+    
+    if (!success) {
+        return res.status(500).json({ error: 'Failed to save user' });
+    }
     
     console.log(`👤 New user created: ${username} (ID: ${newEmployeeId})`);
     
@@ -346,12 +407,12 @@ app.post('/api/users/create', (req, res) => {
         username: newUser.username,
         password: password, // ⚠️ Only returned once!
         employeeId: newUser.employeeId,
-        employeeName: newUser.employeeName
+        employeeName: newUser.name
     });
 });
  
 // Delete User by ID - Alias
-app.delete('/api/users/:employeeId', (req, res) => {
+app.delete('/api/users/:employeeId', async (req, res) => {
     const employeeId = parseInt(req.params.employeeId);
     
     if (employeeId === 0) {
@@ -371,8 +432,11 @@ app.delete('/api/users/:employeeId', (req, res) => {
         return res.status(404).json({ error: 'User not found' });
     }
     
-    users.delete(userToDelete);
-    saveUsers(); // 💾 Save to file!
+    const success = await deleteUserFromDB(userToDelete);
+    
+    if (!success) {
+        return res.status(500).json({ error: 'Failed to delete user' });
+    }
     
     console.log(`👤 User deleted: ${userToDelete} (ID: ${employeeId})`);
     
@@ -548,7 +612,7 @@ app.post('/api/ping', (req, res) => {
 // ============================================
 // 🔧 FIXED GET ENDPOINTS - Jetzt mit richtigem Format!
 // ============================================
-
+ 
 // Get Screenshots for employee
 app.get('/api/screenshots/:employeeId', (req, res) => {
     const employeeId = parseInt(req.params.employeeId);
@@ -583,13 +647,13 @@ app.get('/api/activities/:employeeId', (req, res) => {
         activities: transformedActivities 
     });
 });
-
+ 
 // ═══════════════════════════════════════════════════════════════════
 // TRANSLATIONS API (NEW!)
 // ═══════════════════════════════════════════════════════════════════
-
+ 
 const translations = new Map();
-
+ 
 // POST Translation
 app.post('/api/translations', (req, res) => {
     const { employeeId, employeeName, timestamp, translation } = req.body;
@@ -625,7 +689,7 @@ app.post('/api/translations', (req, res) => {
     
     res.json({ success: true });
 });
-
+ 
 // GET Translations for employee
 app.get('/api/translations/:employeeId', (req, res) => {
     const employeeId = parseInt(req.params.employeeId);
@@ -692,7 +756,7 @@ app.get('/api/employees', (req, res) => {
     
     res.json({ employees: employeeList });
 });
-
+ 
 // ============================================
 // 📊 DASHBOARD ROUTE (explicit for Railway)
 // ============================================
@@ -884,3 +948,4 @@ process.on('SIGINT', () => {
         process.exit(0);
     });
 });
+ 
