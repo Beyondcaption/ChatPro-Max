@@ -1,5 +1,5 @@
- // Force rebuild for public/ folder
 
+Kopieren
 
 const express = require('express');
 const http = require('http');
@@ -694,6 +694,13 @@ app.get('/api/employees', (req, res) => {
         });
     
     res.json({ employees: employeeList });
+});
+ 
+// ============================================
+// 📊 DASHBOARD ROUTE (explicit for Railway)
+// ============================================
+app.get('/dashboard.html', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'dashboard.html'));
 });
  
 // ============================================
