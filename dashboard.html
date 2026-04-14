@@ -385,77 +385,6 @@
             color: #888;
         }
 
-        /* TRANSLATIONS TAB STYLES */
-        .translations-list {
-            display: flex;
-            flex-direction: column;
-            gap: 15px;
-        }
-
-        .translation-item {
-            background: #242a47;
-            padding: 20px;
-            border-radius: 10px;
-            border-left: 4px solid #00ff88;
-        }
-
-        .translation-header {
-            font-size: 11px;
-            color: #00ff88;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-            margin-bottom: 8px;
-            font-weight: 600;
-        }
-
-        .translation-message {
-            background: #1a1f3a;
-            padding: 12px;
-            border-radius: 6px;
-            margin-bottom: 12px;
-            font-size: 14px;
-            color: #e0e0e0;
-            line-height: 1.5;
-        }
-
-        .translation-response {
-            font-size: 13px;
-            color: #9ca3af;
-            margin-bottom: 12px;
-        }
-
-        .translation-response strong {
-            color: #c0c5d0;
-        }
-
-        .translation-variants {
-            display: flex;
-            flex-direction: column;
-            gap: 8px;
-            margin-top: 10px;
-        }
-
-        .translation-variant {
-            background: #1a1f3a;
-            padding: 10px 12px;
-            border-radius: 6px;
-            font-size: 13px;
-            color: #d1d5db;
-        }
-
-        .translation-variant-label {
-            color: #00ff88;
-            font-weight: 600;
-            margin-right: 8px;
-        }
-
-        .translation-time {
-            font-size: 11px;
-            color: #6b7280;
-            margin-top: 10px;
-            text-align: right;
-        }
-
         /* ADMIN TAB STYLES */
         .admin-section {
             background: #242a47;
@@ -679,7 +608,6 @@
                     <button class="tab active" data-tab="activity">Aktivität</button>
                     <button class="tab" data-tab="screenshots">Screenshots</button>
                     <button class="tab" data-tab="downloads">Downloads</button>
-                    <button class="tab" data-tab="translations">Translations</button>
                     <button class="tab" data-tab="admin">👤 Admin</button>
                 </div>
 
@@ -733,20 +661,6 @@
                         </button>
                     </div>
                     <div id="downloadsList" class="downloads-list"></div>
-                </div>
-
-                <!-- Translations Tab -->
-                <div id="translations-content" class="tab-content">
-                    <div class="filter-bar">
-                        <label>Filter:</label>
-                        <select id="translationsFilter">
-                            <option value="all">Alle</option>
-                            <option value="today">Heute</option>
-                            <option value="week">Letzte 7 Tage</option>
-                            <option value="month">Letzte 30 Tage</option>
-                        </select>
-                    </div>
-                    <div id="translationsList" class="translations-list"></div>
                 </div>
 
                 <!-- Admin Tab -->
@@ -909,7 +823,6 @@
             if (tab === 'activity') await loadActivities();
             if (tab === 'screenshots') await loadScreenshots();
             if (tab === 'downloads') await loadDownloads();
-            if (tab === 'translations') await loadTranslations();
         }
 
         // Load Activities
@@ -1000,51 +913,6 @@
         }
 
         // Load Translations
-        async function loadTranslations() {
-            try {
-                const response = await fetch(`${API_URL}/translations/${currentEmployee.employeeId}`);
-                const data = await response.json();
-                
-                const translations = data.translations || [];
-                const filtered = filterByDate(translations, document.getElementById('translationsFilter').value);
-                
-                const list = document.getElementById('translationsList');
-                if (filtered.length === 0) {
-                    list.innerHTML = '<p style="color: #888;">Keine Übersetzungen im gewählten Zeitraum</p>';
-                    return;
-                }
-                
-                list.innerHTML = filtered.map(trans => {
-                    const t = trans.translation;
-                    return `
-                        <div class="translation-item">
-                            <div class="translation-header">Subscriber Message:</div>
-                            <div class="translation-message">${escapeHtml(t.subscriberMessage || '')}</div>
-                            
-                            <div class="translation-response">
-                                <strong>Chatter Response:</strong> ${escapeHtml(t.chatterResponse || '')}
-                            </div>
-                            
-                            ${t.generatedVariants && t.generatedVariants.length > 0 ? `
-                                <div class="translation-variants">
-                                    ${t.generatedVariants.slice(0, 3).map(v => `
-                                        <div class="translation-variant">
-                                            <span class="translation-variant-label">${escapeHtml(v.label || 'Variant')}:</span>
-                                            ${escapeHtml(v.de || '')}
-                                        </div>
-                                    `).join('')}
-                                </div>
-                            ` : ''}
-                            
-                            <div class="translation-time">${formatDate(trans.timestamp)}</div>
-                        </div>
-                    `;
-                }).join('');
-            } catch (error) {
-                console.error('Error loading translations:', error);
-            }
-        }
-
         // Helper: Escape HTML
         function escapeHtml(text) {
             const div = document.createElement('div');
@@ -1316,7 +1184,6 @@
         document.getElementById('activityFilter').addEventListener('change', loadActivities);
         document.getElementById('screenshotsFilter').addEventListener('change', loadScreenshots);
         document.getElementById('downloadsFilter').addEventListener('change', loadDownloads);
-        document.getElementById('translationsFilter').addEventListener('change', loadTranslations);
     </script>
 </body>
 </html>
