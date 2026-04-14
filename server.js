@@ -1,3 +1,6 @@
+S
+Kopieren
+
 const express = require('express');
 const http = require('http');
 const WebSocket = require('ws');
@@ -745,7 +748,8 @@ app.get('/api/employees', (req, res) => {
             
             return {
                 id: u.employeeId,
-                name: u.employeeName || u.username,
+                employeeId: u.employeeId,
+                name: u.name || u.username,
                 username: u.username,
                 online: agent ? (now - agent.lastSeen < 120000) : false,
                 lastSeen: agent ? agent.lastSeen : null,
@@ -948,4 +952,3 @@ process.on('SIGINT', () => {
         process.exit(0);
     });
 });
- 
