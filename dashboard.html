@@ -720,7 +720,13 @@
                 
                 if (response.ok) {
                     const data = await response.json();
-                    currentEmployee = data.user;
+                    
+                    // ✅ Admin sieht ALLE Employees, nicht nur sich selbst
+                    if (data.user.role === 'admin') {
+                        currentEmployee = null; // Admin wählt Employee aus Liste
+                    } else {
+                        currentEmployee = data.user; // Employee sieht nur eigene Daten
+                    }
                     
                     document.getElementById('loginScreen').classList.add('hidden');
                     document.getElementById('mainDashboard').classList.remove('hidden');
@@ -737,7 +743,12 @@
 
         // Initialize Dashboard
         function initDashboard() {
-            loadEmployees();
+            loadEmployees().then(() => {
+                // ✅ Wenn Admin und kein Employee gewählt → wähle ersten aus Liste
+                if (!currentEmployee && employees.length > 0) {
+                    selectEmployee(employees[0].id);
+                }
+            });
             connectWebSocket();
             initTabs();
             setInterval(loadEmployees, 5000);
