@@ -1,3 +1,6 @@
+
+Kopieren
+
 const express = require('express');
 const http = require('http');
 const WebSocket = require('ws');
@@ -25,7 +28,7 @@ const downloads = new Map();
 // 💾 PERSISTENT USER STORAGE (FILE-BASED)
 // ============================================
 const USERS_FILE = path.join(__dirname, 'users.json');
-
+ 
 // Load users from file
 function loadUsers() {
     try {
@@ -64,7 +67,7 @@ function loadUsers() {
         saveUsers();
     }
 }
-
+ 
 // Save users to file
 function saveUsers() {
     try {
@@ -75,10 +78,10 @@ function saveUsers() {
         console.error('❌ Error saving users:', error.message);
     }
 }
-
+ 
 // User Management Database
 const users = new Map();
-
+ 
 // Load users on startup
 loadUsers();
  
@@ -548,7 +551,7 @@ app.post('/api/ping', (req, res) => {
 // ============================================
 // 🔧 FIXED GET ENDPOINTS - Jetzt mit richtigem Format!
 // ============================================
-
+ 
 // Get Screenshots for employee
 app.get('/api/screenshots/:employeeId', (req, res) => {
     const employeeId = parseInt(req.params.employeeId);
@@ -581,6 +584,61 @@ app.get('/api/activities/:employeeId', (req, res) => {
     res.json({ 
         success: true,
         activities: transformedActivities 
+    });
+});
+ 
+// ═══════════════════════════════════════════════════════════════════
+// TRANSLATIONS API (NEW!)
+// ═══════════════════════════════════════════════════════════════════
+ 
+const translations = new Map();
+ 
+// POST Translation
+app.post('/api/translations', (req, res) => {
+    const { employeeId, employeeName, timestamp, translation } = req.body;
+    
+    if (employeeId === undefined || !translation) {
+        return res.status(400).json({ error: 'Missing required fields' });
+    }
+    
+    // Store translation history (keep last 100)
+    if (!translations.has(employeeId)) {
+        translations.set(employeeId, []);
+    }
+    const translationList = translations.get(employeeId);
+    translationList.unshift({ 
+        timestamp: timestamp || Date.now(), 
+        employeeName,
+        translation 
+    });
+    if (translationList.length > 100) {
+        translationList.length = 100;
+    }
+    
+    console.log(`💬 Translation logged for employee ${employeeId}`);
+    
+    // Broadcast to admins
+    broadcastToAdmins({
+        type: 'translation',
+        employeeId,
+        employeeName,
+        translation,
+        timestamp: timestamp || Date.now()
+    });
+    
+    res.json({ success: true });
+});
+ 
+// GET Translations for employee
+app.get('/api/translations/:employeeId', (req, res) => {
+    const employeeId = parseInt(req.params.employeeId);
+    const employeeTranslations = translations.get(employeeId) || [];
+    
+    console.log(`📊 GET /api/translations/${employeeId} - Returning ${employeeTranslations.length} translations`);
+    
+    res.json({ 
+        success: true,
+        translations: employeeTranslations 
     });
 });
  
