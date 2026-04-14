@@ -1,3 +1,6 @@
+
+Kopieren
+
 const express = require('express');
 const http = require('http');
 const WebSocket = require('ws');
@@ -489,25 +492,57 @@ app.post('/api/ping', (req, res) => {
     res.json({ success: true });
 });
  
+// ============================================
+// 🔧 FIXED GET ENDPOINTS - Jetzt mit richtigem Format!
+// ============================================
+ 
 // Get Screenshots for employee
 app.get('/api/screenshots/:employeeId', (req, res) => {
     const employeeId = parseInt(req.params.employeeId);
     const employeeScreenshots = screenshots.get(employeeId) || [];
-    res.json(employeeScreenshots);
+    
+    console.log(`📸 GET /api/screenshots/${employeeId} - Returning ${employeeScreenshots.length} screenshots`);
+    
+    // ✅ FIXED: Wrap in object with 'screenshots' property
+    res.json({ 
+        success: true,
+        screenshots: employeeScreenshots 
+    });
 });
  
 // Get Activities for employee
 app.get('/api/activities/:employeeId', (req, res) => {
     const employeeId = parseInt(req.params.employeeId);
     const employeeActivities = activities.get(employeeId) || [];
-    res.json(employeeActivities);
+    
+    // ✅ Transform to match dashboard expectations
+    const transformedActivities = employeeActivities.map(item => ({
+        appName: item.activity?.application || 'Unknown',
+        windowTitle: item.activity?.windowTitle || '',
+        timestamp: item.activity?.timestamp || item.timestamp
+    }));
+    
+    console.log(`📊 GET /api/activities/${employeeId} - Returning ${transformedActivities.length} activities`);
+    
+    // ✅ FIXED: Wrap in object with 'activities' property
+    res.json({ 
+        success: true,
+        activities: transformedActivities 
+    });
 });
  
 // Get Downloads for employee
 app.get('/api/downloads/:employeeId', (req, res) => {
     const employeeId = parseInt(req.params.employeeId);
     const employeeDownloads = downloads.get(employeeId) || [];
-    res.json(employeeDownloads);
+    
+    console.log(`📥 GET /api/downloads/${employeeId} - Returning ${employeeDownloads.length} downloads`);
+    
+    // ✅ FIXED: Wrap in object with 'downloads' property
+    res.json({ 
+        success: true,
+        downloads: employeeDownloads 
+    });
 });
  
 // Get all agents
@@ -734,4 +769,3 @@ process.on('SIGINT', () => {
         process.exit(0);
     });
 });
- 
