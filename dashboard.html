@@ -642,6 +642,15 @@
         .profile-card-details span {
             display: block;
         }
+
+        /* Model Sheet Editor */
+        .sheet-editor { display:none; background:#0a0e27; border:1px solid #2d3454; border-radius:8px; padding:16px; margin-top:12px; }
+        .sheet-editor.open { display:block; }
+        .sheet-section-label { font-size:11px; color:#888; margin-bottom:4px; margin-top:12px; text-transform:uppercase; letter-spacing:0.08em; }
+        .sheet-section-label:first-child { margin-top:0; }
+        .sheet-editor textarea { width:100%; padding:8px 10px; border-radius:5px; border:1px solid #2d3454; background:#1a1f3a; color:#e0e0e0; font-size:12px; font-family:'Courier New',monospace; resize:vertical; line-height:1.6; }
+        .sheet-editor textarea:focus { outline:none; border-color:#ff4d8f; }
+        .sheet-hint { font-size:10px; color:#555; margin-top:3px; margin-bottom:8px; }
     </style>
 </head>
 <body>
@@ -1317,11 +1326,16 @@
                     return;
                 }
 
-                container.innerHTML = profiles.map(p => `
-                    <div class="profile-card">
+                container.innerHTML = profiles.map(p => {
+                    const sd = p.sheet_data || {};
+                    return `
+                    <div class="profile-card" id="card-${p.id}">
                         <div class="profile-card-header">
                             <div class="profile-card-name">${p.name}${p.age ? ' (' + p.age + ')' : ''}</div>
-                            <button class="btn-delete" onclick="deleteProfile('${p.id}', '${escapeHtml(p.name)}')">Löschen</button>
+                            <div style="display:flex;gap:8px;">
+                                <button class="btn-primary" style="font-size:12px;padding:5px 12px;" onclick="toggleSheetEditor('${p.id}')">📝 Model Sheet</button>
+                                <button class="btn-delete" onclick="deleteProfile('${p.id}', '${escapeHtml(p.name)}')">Löschen</button>
+                            </div>
                         </div>
                         <div class="profile-card-details">
                             ${p.personality ? '<span>🧠 ' + escapeHtml(p.personality) + '</span>' : ''}
@@ -1330,8 +1344,38 @@
                             ${p.style ? '<span>💬 ' + escapeHtml(p.style) + '</span>' : ''}
                             ${p.avoid_topics ? '<span>🚫 ' + escapeHtml(p.avoid_topics) + '</span>' : ''}
                         </div>
+                        <div class="sheet-editor" id="sheet-${p.id}">
+                            <div class="sheet-section-label">👤 General Info</div>
+                            <div class="sheet-hint">Name, Age, Location, Height, Body type, Languages — one per line as "Key: Value"</div>
+                            <textarea id="sd-general-${p.id}" rows="5">${escapeHtml(sd.general || '')}</textarea>
+
+                            <div class="sheet-section-label">📖 Background</div>
+                            <div class="sheet-hint">Free text — her story, where she grew up, what she does for fun</div>
+                            <textarea id="sd-background-${p.id}" rows="4">${escapeHtml(sd.background || '')}</textarea>
+
+                            <div class="sheet-section-label">⭐ Favorites</div>
+                            <div class="sheet-hint">Favorite food, movies, music, colors etc. as "Key: Value"</div>
+                            <textarea id="sd-favorites-${p.id}" rows="4">${escapeHtml(sd.favorites || '')}</textarea>
+
+                            <div class="sheet-section-label">🧠 Personality</div>
+                            <div class="sheet-hint">Traits, turn-ons, turn-offs, communication style as "Key: Value"</div>
+                            <textarea id="sd-personality-${p.id}" rows="4">${escapeHtml(sd.personality || '')}</textarea>
+
+                            <div class="sheet-section-label">🎭 Cosplay</div>
+                            <div class="sheet-hint">Costumes, themes, styles she does as "Key: Value" or free text</div>
+                            <textarea id="sd-cosplay-${p.id}" rows="3">${escapeHtml(sd.cosplay || '')}</textarea>
+
+                            <div class="sheet-section-label">🔒 Content Info (Internal Only)</div>
+                            <div class="sheet-hint">PPV prices, what she will/won't do, content limits — NEVER share with fans</div>
+                            <textarea id="sd-content-${p.id}" rows="4">${escapeHtml(sd.content || '')}</textarea>
+
+                            <div style="margin-top:14px;display:flex;gap:10px;align-items:center;">
+                                <button class="btn-primary" onclick="saveSheet('${p.id}')">💾 Sheet speichern</button>
+                                <span id="sheet-status-${p.id}" style="font-size:12px;color:#00ff88;display:none;">✅ Gespeichert!</span>
+                            </div>
+                        </div>
                     </div>
-                `).join('');
+                `}).join('');
             } catch(e) {
                 console.error('Error loading profiles:', e);
             }
@@ -1367,6 +1411,39 @@
                     document.getElementById(id).value = '';
                 });
                 loadProfiles();
+            } catch(e) {
+                alert('❌ Fehler: ' + e.message);
+            }
+        }
+
+        function toggleSheetEditor(id) {
+            const el = document.getElementById('sheet-' + id);
+            el.classList.toggle('open');
+        }
+
+        async function saveSheet(id) {
+            const adminKey = document.getElementById('adminKeyInput').value.trim();
+            if (!adminKey) { alert('Bitte Admin Key eingeben!'); return; }
+
+            const sheet_data = {
+                general:     document.getElementById('sd-general-' + id).value.trim(),
+                background:  document.getElementById('sd-background-' + id).value.trim(),
+                favorites:   document.getElementById('sd-favorites-' + id).value.trim(),
+                personality: document.getElementById('sd-personality-' + id).value.trim(),
+                cosplay:     document.getElementById('sd-cosplay-' + id).value.trim(),
+                content:     document.getElementById('sd-content-' + id).value.trim()
+            };
+
+            try {
+                const res = await fetch(`${API_URL}/admin/creator-profiles/${id}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json', 'x-admin-key': adminKey },
+                    body: JSON.stringify({ sheet_data })
+                });
+                if (!res.ok) { const e = await res.json(); throw new Error(e.error || 'Fehler'); }
+                const status = document.getElementById('sheet-status-' + id);
+                status.style.display = 'inline';
+                setTimeout(() => { status.style.display = 'none'; }, 2500);
             } catch(e) {
                 alert('❌ Fehler: ' + e.message);
             }
