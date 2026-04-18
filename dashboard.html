@@ -555,6 +555,93 @@
         .hidden {
             display: none !important;
         }
+
+        /* Creator Profiles */
+        .profile-form-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+
+        .profile-form-grid input,
+        .profile-form-grid textarea {
+            padding: 10px;
+            border-radius: 5px;
+            border: 1px solid #2d3454;
+            background: #1a1f3a;
+            color: #e0e0e0;
+            font-size: 13px;
+            font-family: inherit;
+            resize: vertical;
+        }
+
+        .profile-form-grid input:focus,
+        .profile-form-grid textarea:focus {
+            outline: none;
+            border-color: #ff4d8f;
+        }
+
+        .profile-form-grid .full-width {
+            grid-column: 1 / -1;
+        }
+
+        .admin-key-row {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            margin-bottom: 20px;
+            padding: 12px;
+            background: #1a1f3a;
+            border-radius: 8px;
+            border: 1px solid #2d3454;
+        }
+
+        .admin-key-row input {
+            flex: 1;
+            padding: 8px 12px;
+            border-radius: 5px;
+            border: 1px solid #2d3454;
+            background: #0a0e27;
+            color: #e0e0e0;
+            font-size: 13px;
+        }
+
+        .admin-key-row input:focus {
+            outline: none;
+            border-color: #ff4d8f;
+        }
+
+        .profile-card {
+            background: #1a1f3a;
+            padding: 15px;
+            border-radius: 8px;
+            border-left: 4px solid #ff4d8f;
+            margin-bottom: 12px;
+        }
+
+        .profile-card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+
+        .profile-card-name {
+            font-weight: 700;
+            font-size: 16px;
+            color: #ff4d8f;
+        }
+
+        .profile-card-details {
+            font-size: 12px;
+            color: #888;
+            line-height: 1.7;
+        }
+
+        .profile-card-details span {
+            display: block;
+        }
     </style>
 </head>
 <body>
@@ -688,6 +775,30 @@
                         <h3>📊 System Information</h3>
                         <div id="system-info" class="system-info"></div>
                     </div>
+
+                    <!-- Creator Profiles -->
+                    <div class="admin-section">
+                        <h3>🎭 Creator Profile</h3>
+
+                        <div class="admin-key-row">
+                            <span style="font-size:13px;color:#888;white-space:nowrap;">Admin Key:</span>
+                            <input type="password" id="adminKeyInput" placeholder="Für Erstellen & Löschen erforderlich" />
+                        </div>
+
+                        <div id="profiles-list" style="margin-bottom:20px;"></div>
+
+                        <div style="color:#00ff88;font-weight:600;margin-bottom:12px;font-size:15px;">➕ Neues Profil erstellen</div>
+                        <div class="profile-form-grid">
+                            <input type="text" id="p-name" placeholder="Name (z.B. Luna) *" />
+                            <input type="number" id="p-age" placeholder="Alter" min="18" max="99" />
+                            <textarea id="p-personality" rows="2" placeholder="Persönlichkeit (z.B. verspielt, selbstbewusst, warm)"></textarea>
+                            <textarea id="p-interests" rows="2" placeholder="Interessen & Hobbys (z.B. Fitness, Netflix, Kochen)"></textarea>
+                            <textarea id="p-preferences" rows="2" placeholder="Vorlieben (z.B. mag Komplimente, intensive Gespräche)"></textarea>
+                            <textarea id="p-style" rows="2" placeholder="Kommunikationsstil (z.B. kurz, direkt, viele Emojis)"></textarea>
+                            <textarea id="p-avoid" rows="2" class="full-width" placeholder="Themen vermeiden (z.B. Wohnort, echter Name, Ex-Freunde)"></textarea>
+                        </div>
+                        <button onclick="createProfile()" class="btn-primary">🎭 Profil erstellen</button>
+                    </div>
                 </div>
             </div>
         </div>
@@ -769,6 +880,7 @@
                     
                     if (tabName === 'admin') {
                         loadUsers();
+                        loadProfiles();
                     } else if (currentEmployee) {
                         loadDataForTab(tabName);
                     }
@@ -1189,6 +1301,93 @@
 
         function closeModal() {
             document.getElementById('imageModal').classList.remove('active');
+        }
+
+        // ── Creator Profiles ──
+        async function loadProfiles() {
+            try {
+                const res = await fetch(`${API_URL}/creator-profiles`);
+                const data = await res.json();
+                const profiles = data.profiles || [];
+                const container = document.getElementById('profiles-list');
+                if (!container) return;
+
+                if (profiles.length === 0) {
+                    container.innerHTML = '<p style="color:#888;">Noch keine Profile angelegt.</p>';
+                    return;
+                }
+
+                container.innerHTML = profiles.map(p => `
+                    <div class="profile-card">
+                        <div class="profile-card-header">
+                            <div class="profile-card-name">${p.name}${p.age ? ' (' + p.age + ')' : ''}</div>
+                            <button class="btn-delete" onclick="deleteProfile('${p.id}', '${escapeHtml(p.name)}')">Löschen</button>
+                        </div>
+                        <div class="profile-card-details">
+                            ${p.personality ? '<span>🧠 ' + escapeHtml(p.personality) + '</span>' : ''}
+                            ${p.interests ? '<span>🎯 ' + escapeHtml(p.interests) + '</span>' : ''}
+                            ${p.preferences ? '<span>💜 ' + escapeHtml(p.preferences) + '</span>' : ''}
+                            ${p.style ? '<span>💬 ' + escapeHtml(p.style) + '</span>' : ''}
+                            ${p.avoid_topics ? '<span>🚫 ' + escapeHtml(p.avoid_topics) + '</span>' : ''}
+                        </div>
+                    </div>
+                `).join('');
+            } catch(e) {
+                console.error('Error loading profiles:', e);
+            }
+        }
+
+        async function createProfile() {
+            const adminKey = document.getElementById('adminKeyInput').value.trim();
+            if (!adminKey) { alert('Bitte Admin Key eingeben!'); return; }
+
+            const name = document.getElementById('p-name').value.trim();
+            if (!name) { alert('Name ist Pflichtfeld!'); return; }
+
+            const profile = {
+                name,
+                age: parseInt(document.getElementById('p-age').value) || null,
+                personality: document.getElementById('p-personality').value.trim(),
+                interests: document.getElementById('p-interests').value.trim(),
+                preferences: document.getElementById('p-preferences').value.trim(),
+                style: document.getElementById('p-style').value.trim(),
+                avoid_topics: document.getElementById('p-avoid').value.trim()
+            };
+
+            try {
+                const res = await fetch(`${API_URL}/admin/creator-profiles`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'x-admin-key': adminKey },
+                    body: JSON.stringify(profile)
+                });
+                if (!res.ok) { const e = await res.json(); throw new Error(e.error || 'Fehler'); }
+
+                alert(`✅ Profil "${name}" erstellt!`);
+                ['p-name','p-age','p-personality','p-interests','p-preferences','p-style','p-avoid'].forEach(id => {
+                    document.getElementById(id).value = '';
+                });
+                loadProfiles();
+            } catch(e) {
+                alert('❌ Fehler: ' + e.message);
+            }
+        }
+
+        async function deleteProfile(id, name) {
+            const adminKey = document.getElementById('adminKeyInput').value.trim();
+            if (!adminKey) { alert('Bitte Admin Key eingeben!'); return; }
+            if (!confirm(`Profil "${name}" wirklich löschen?`)) return;
+
+            try {
+                const res = await fetch(`${API_URL}/admin/creator-profiles/${id}`, {
+                    method: 'DELETE',
+                    headers: { 'x-admin-key': adminKey }
+                });
+                if (!res.ok) throw new Error('Fehler beim Löschen');
+                alert(`✅ Profil "${name}" gelöscht!`);
+                loadProfiles();
+            } catch(e) {
+                alert('❌ Fehler: ' + e.message);
+            }
         }
 
         // Filter Event Listeners
