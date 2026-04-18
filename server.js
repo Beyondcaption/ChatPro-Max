@@ -275,6 +275,11 @@ setTimeout(cleanupOldData, 5000);
 // REST API ENDPOINTS
 // ============================================
  
+// Root → Dashboard
+app.get('/', (req, res) => {
+    res.redirect('/dashboard.html');
+});
+
 // Health Check
 app.get('/health', (req, res) => {
     res.json({ 
