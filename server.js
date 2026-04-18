@@ -713,8 +713,22 @@ app.get('/api/activities/:employeeId', (req, res) => {
 // CREATOR PROFILES API
 // ═══════════════════════════════════════════════════════════════════
 
-// GET — public, read-only (chatters fetch this on app start)
-app.get('/api/creator-profiles', (req, res) => {
+// App token middleware — protects profile data from public scraping
+function appAuth(req, res, next) {
+    const token = req.headers['x-app-token'];
+    const appToken = process.env.APP_TOKEN;
+    if (!appToken) {
+        console.warn('⚠️  APP_TOKEN not set — profile endpoint is unprotected!');
+        return next(); // allow through but warn
+    }
+    if (!token || token !== appToken) {
+        return res.status(401).json({ error: 'Unauthorized' });
+    }
+    next();
+}
+
+// GET — app-token protected (chatters fetch via Electron app, token stays in main process)
+app.get('/api/creator-profiles', appAuth, (req, res) => {
     const profiles = Array.from(creatorProfiles.values());
     res.json({ success: true, profiles });
 });
