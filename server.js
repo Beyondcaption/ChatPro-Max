@@ -21,6 +21,7 @@ const admins = new Set();
 const screenshots = new Map();
 const activities = new Map();
 const downloads = new Map();
+const creatorProfiles = new Map();
  
 // ============================================
 // 🔥 SUPABASE CONFIGURATION
@@ -125,6 +126,61 @@ async function deleteUserFromDB(username) {
  
 // Load users on startup
 loadUsers();
+
+// ============================================
+// 💾 CREATOR PROFILES (SUPABASE)
+// ============================================
+
+async function loadCreatorProfiles() {
+    try {
+        const { data, error } = await supabase.from('creator_profiles').select('*');
+        if (error) throw error;
+        creatorProfiles.clear();
+        data.forEach(p => creatorProfiles.set(p.id, p));
+        console.log(`✅ Loaded ${creatorProfiles.size} creator profiles`);
+    } catch (error) {
+        console.error('❌ Error loading creator profiles:', error.message);
+    }
+}
+
+async function saveCreatorProfile(profile) {
+    try {
+        const { data, error } = await supabase
+            .from('creator_profiles')
+            .upsert(profile, { onConflict: 'id' })
+            .select()
+            .single();
+        if (error) throw error;
+        creatorProfiles.set(data.id, data);
+        return data;
+    } catch (error) {
+        console.error('❌ Error saving creator profile:', error.message);
+        return null;
+    }
+}
+
+async function deleteCreatorProfile(id) {
+    try {
+        const { error } = await supabase.from('creator_profiles').delete().eq('id', id);
+        if (error) throw error;
+        creatorProfiles.delete(id);
+        return true;
+    } catch (error) {
+        console.error('❌ Error deleting creator profile:', error.message);
+        return false;
+    }
+}
+
+loadCreatorProfiles();
+
+// Admin key middleware
+function adminAuth(req, res, next) {
+    const key = req.headers['x-admin-key'];
+    if (!key || key !== process.env.ADMIN_KEY) {
+        return res.status(403).json({ error: 'Unauthorized' });
+    }
+    next();
+}
  
 console.log('🚀 Monitoring Relay Server starting...');
  
@@ -648,6 +704,63 @@ app.get('/api/activities/:employeeId', (req, res) => {
     });
 });
  
+// ═══════════════════════════════════════════════════════════════════
+// CREATOR PROFILES API
+// ═══════════════════════════════════════════════════════════════════
+
+// GET — public, read-only (chatters fetch this on app start)
+app.get('/api/creator-profiles', (req, res) => {
+    const profiles = Array.from(creatorProfiles.values());
+    res.json({ success: true, profiles });
+});
+
+// POST — admin only: create new profile
+app.post('/api/admin/creator-profiles', adminAuth, async (req, res) => {
+    const { name, age, personality, style, interests, preferences, avoid_topics } = req.body;
+    if (!name) return res.status(400).json({ error: 'Name required' });
+
+    const profile = {
+        id: Date.now().toString(),
+        name, age: age || null,
+        personality: personality || null,
+        style: style || null,
+        interests: interests || null,
+        preferences: preferences || null,
+        avoid_topics: avoid_topics || null,
+        created_at: new Date().toISOString(),
+        updated_at: null
+    };
+
+    const saved = await saveCreatorProfile(profile);
+    if (!saved) return res.status(500).json({ error: 'Failed to save' });
+    console.log(`✅ Creator profile created: ${name}`);
+    res.json({ success: true, profile: saved });
+});
+
+// PUT — admin only: update existing profile
+app.put('/api/admin/creator-profiles/:id', adminAuth, async (req, res) => {
+    const { id } = req.params;
+    if (!creatorProfiles.has(id)) return res.status(404).json({ error: 'Profile not found' });
+
+    const existing = creatorProfiles.get(id);
+    const updated = { ...existing, ...req.body, id, updated_at: new Date().toISOString() };
+
+    const saved = await saveCreatorProfile(updated);
+    if (!saved) return res.status(500).json({ error: 'Failed to save' });
+    console.log(`✅ Creator profile updated: ${updated.name}`);
+    res.json({ success: true, profile: saved });
+});
+
+// DELETE — admin only
+app.delete('/api/admin/creator-profiles/:id', adminAuth, async (req, res) => {
+    const { id } = req.params;
+    if (!creatorProfiles.has(id)) return res.status(404).json({ error: 'Profile not found' });
+
+    const success = await deleteCreatorProfile(id);
+    if (!success) return res.status(500).json({ error: 'Failed to delete' });
+    res.json({ success: true });
+});
+
 // ═══════════════════════════════════════════════════════════════════
 // TRANSLATIONS API (NEW!)
 // ═══════════════════════════════════════════════════════════════════
