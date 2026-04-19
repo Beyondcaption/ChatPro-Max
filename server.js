@@ -505,7 +505,7 @@ app.delete('/api/users/:employeeId', async (req, res) => {
 });
  
 // Activity Upload
-app.post('/api/activity', (req, res) => {
+app.post('/api/activity', appAuth, (req, res) => {
     const { employeeId, timestamp, activity } = req.body;
     
     if (employeeId === undefined || !activity) {
@@ -546,7 +546,7 @@ app.post('/api/activity', (req, res) => {
 });
  
 // ✅ Screenshot Upload - FÜR BILDER!
-app.post('/api/screenshots', (req, res) => {
+app.post('/api/screenshots', appAuth, (req, res) => {
     const { employeeId, imageData, filename, timestamp } = req.body;
     
     console.log('📸 Screenshot received from employee:', employeeId);
@@ -582,7 +582,7 @@ app.post('/api/screenshots', (req, res) => {
 });
  
 // Alerts - für Downloads UND User-Screenshots!
-app.post('/api/alerts', (req, res) => {
+app.post('/api/alerts', appAuth, (req, res) => {
     const { type, data, timestamp, employeeId } = req.body;
  
     console.log('🚨 Alert received:', type, 'from employee:', employeeId);
@@ -657,7 +657,7 @@ app.post('/api/alerts', (req, res) => {
 });
  
 // Ping (keep-alive)
-app.post('/api/ping', (req, res) => {
+app.post('/api/ping', appAuth, (req, res) => {
     const { employeeId, timestamp, version } = req.body;
     
     if (employeeId) {
@@ -785,7 +785,52 @@ app.delete('/api/admin/creator-profiles/:id', adminAuth, async (req, res) => {
 // ═══════════════════════════════════════════════════════════════════
  
 const translations = new Map();
- 
+
+// DeepL Proxy — key stays in Railway env, never in the client binary
+app.post('/api/deepl', appAuth, async (req, res) => {
+    const { text } = req.body;
+    if (!text) return res.status(400).json({ error: 'Missing text' });
+
+    const deepLKey = process.env.DEEPL_KEY;
+    if (!deepLKey) return res.status(500).json({ error: 'DeepL not configured' });
+
+    const https = require('https');
+    const body = new URLSearchParams({ text, source_lang: 'DE', target_lang: 'EN-US' }).toString();
+
+    const tryEndpoint = (host, cb) => {
+        const reqOpts = {
+            hostname: host, path: '/v2/translate', method: 'POST',
+            headers: {
+                'Authorization': 'DeepL-Auth-Key ' + deepLKey,
+                'Content-Type': 'application/x-www-form-urlencoded',
+                'Content-Length': Buffer.byteLength(body)
+            }
+        };
+        const r = https.request(reqOpts, (resp) => {
+            let data = '';
+            resp.on('data', d => data += d);
+            resp.on('end', () => {
+                try {
+                    const parsed = JSON.parse(data);
+                    if (parsed.translations && parsed.translations[0]) cb(null, parsed.translations[0].text);
+                    else cb(new Error('DeepL error'));
+                } catch(e) { cb(e); }
+            });
+        });
+        r.on('error', cb);
+        r.write(body);
+        r.end();
+    };
+
+    tryEndpoint('api.deepl.com', (err, result) => {
+        if (!err) return res.json({ ok: true, text: result });
+        tryEndpoint('api-free.deepl.com', (err2, result2) => {
+            if (!err2) return res.json({ ok: true, text: result2 });
+            res.status(502).json({ ok: false, error: err.message });
+        });
+    });
+});
+
 // POST Translation
 app.post('/api/translations', (req, res) => {
     const { employeeId, employeeName, timestamp, translation } = req.body;
