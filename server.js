@@ -76,6 +76,16 @@ async function loadUsers() {
 }
  
 // Save/Update single user in Supabase
+// created_at/last_login sind bigint (Millisekunden). /api/login setzt lastLogin als ISO-Text,
+// das liess jedes saveUser scheitern (auch Passwort-Aenderungen). Darum hier immer in ms umrechnen.
+function toMs(v) {
+    if (v == null || v === '') return null;
+    if (typeof v === 'number') return Number.isFinite(v) ? Math.round(v) : null;
+    const n = Number(v);
+    if (Number.isFinite(n)) return Math.round(n);
+    const t = Date.parse(v);
+    return Number.isFinite(t) ? t : null;
+}
 async function saveUser(user) {
     try {
         const { data, error } = await supabase
@@ -86,8 +96,8 @@ async function saveUser(user) {
                 employee_id: user.employeeId,
                 name: user.name,
                 role: user.role,
-                created_at: user.createdAt,
-                last_login: user.lastLogin
+                created_at: toMs(user.createdAt),
+                last_login: toMs(user.lastLogin)
             }, {
                 onConflict: 'username'
             });
